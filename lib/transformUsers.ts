@@ -1,6 +1,6 @@
 import { APIUser } from './fetchUsers';
 
-type GroupedResult = {
+export type GroupedResult = {
   [department: string]: {
     male: number;
     female: number;
@@ -13,14 +13,17 @@ type GroupedResult = {
 export function transformUsers(users: APIUser[]): GroupedResult {
   const result: GroupedResult = {};
 
+  // Track ages separately to avoid polluting output type
+  const ageTracker: Map<string, number[]> = new Map();
+
   for (const user of users) {
     const dept = user.company.department;
     const gender = user.gender.toLowerCase();
     const hairColor = user.hair.color;
     const fullName = `${user.firstName}${user.lastName}`;
-    const postal = user.address.postalCode;
-    const age = user.age;
+    const postalCode = user.address.postalCode;
 
+    // Initialize department if missing
     if (!result[dept]) {
       result[dept] = {
         male: 0,
@@ -29,35 +32,30 @@ export function transformUsers(users: APIUser[]): GroupedResult {
         hair: {},
         addressUser: {},
       };
+      ageTracker.set(dept, []);
     }
 
     const group = result[dept];
 
-    // Count gender
+    // Gender count
     if (gender === 'male') group.male++;
     else if (gender === 'female') group.female++;
 
-    // Track min/max age
-    const ages = (group as any)._ages || [];
-    ages.push(age);
-    (group as any)._ages = ages;
+    // Track ages
+    ageTracker.get(dept)!.push(user.age);
 
     // Hair color count
     group.hair[hairColor] = (group.hair[hairColor] || 0) + 1;
 
-    // Address user
-    group.addressUser[fullName] = postal;
+    // Postal code by name
+    group.addressUser[fullName] = postalCode;
   }
 
-  // Set age range
-  for (const dept in result) {
-    const ages = (result[dept] as any)._ages as number[];
-    if (ages?.length) {
-      const min = Math.min(...ages);
-      const max = Math.max(...ages);
-      result[dept].ageRange = `${min}-${max}`;
-      delete (result[dept] as any)._ages;
-    }
+  // Compute ageRange from tracked ages
+  for (const [dept, ages] of ageTracker.entries()) {
+    const min = Math.min(...ages);
+    const max = Math.max(...ages);
+    result[dept].ageRange = `${min}-${max}`;
   }
 
   return result;

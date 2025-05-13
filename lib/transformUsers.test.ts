@@ -1,4 +1,4 @@
-import { transformUsers } from '../lib/transformUsers';
+import { transformUsers, GroupedResult } from '../lib/transformUsers';
 import { APIUser } from '../lib/fetchUsers';
 
 const mockUsers: APIUser[] = [
@@ -23,7 +23,8 @@ const mockUsers: APIUser[] = [
 ];
 
 test('transformUsers groups and summarizes correctly', () => {
-  const grouped = transformUsers(mockUsers);
+  const grouped: GroupedResult = transformUsers(mockUsers);
+
   expect(grouped).toHaveProperty('Marketing');
   const mkt = grouped['Marketing'];
 
