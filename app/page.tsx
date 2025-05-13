@@ -1,103 +1,237 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
+import { useState, useMemo, useRef, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ArrowRightIcon, ArrowLeftIcon, ClockIcon } from "lucide-react"
+
+// Define the original food item interface without ID
+interface OriginalFoodItem {
+  name: string
+  type: string
+}
+
+// Define the internal food item interface with generated ID
+interface FoodItem extends OriginalFoodItem {
+  id: string
+  returnTime?: number // Track when item will return
+}
+
+export default function FoodCategorizer() {
+  // Original food items without IDs
+  const originalFoodItems: OriginalFoodItem[] = [
+    { type: "Fruit", name: "Apple" },
+    { type: "Vegetable", name: "Broccoli" },
+    { type: "Vegetable", name: "Mushroom" },
+    { type: "Fruit", name: "Banana" },
+    { type: "Vegetable", name: "Tomato" },
+    { type: "Fruit", name: "Orange" },
+    { type: "Fruit", name: "Mango" },
+    { type: "Fruit", name: "Pineapple" },
+    { type: "Vegetable", name: "Cucumber" },
+    { type: "Fruit", name: "Watermelon" },
+    { type: "Vegetable", name: "Carrot" },
+  ]
+
+  // Generate IDs for food items
+  const initialFoodItems: FoodItem[] = useMemo(() => {
+    return originalFoodItems.map((item) => ({
+      ...item,
+      id: `${item.type}-${item.name}`.toLowerCase().replace(/\s+/g, "-"),
+    }))
+  }, [])
+
+  // Extract unique types from the data
+  const foodTypes = useMemo(() => {
+    return Array.from(new Set(initialFoodItems.map((item) => item.type)))
+  }, [initialFoodItems])
+
+  // State for uncategorized items
+  const [uncategorizedItems, setUncategorizedItems] = useState<FoodItem[]>(initialFoodItems)
+
+  // State for categorized items
+  const [categorizedItems, setCategorizedItems] = useState<Map<string, FoodItem[]>>(
+    new Map(foodTypes.map((type) => [type, []])),
+  )
+
+  // Ref to store timers for each item
+  const timersRef = useRef<Map<string, NodeJS.Timeout>>(new Map())
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      // Clear all timers when component unmounts
+      timersRef.current.forEach((timer) => clearTimeout(timer))
+    }
+  }, [])
+
+  // Handle moving item to a category
+  const handleCategorize = (item: FoodItem) => {
+    // Remove from uncategorized items
+    setUncategorizedItems((prev) => prev.filter((i) => i.id !== item.id))
+
+    // Add to categorized items with return time
+    const returnTime = Date.now() + 5000 // 5 seconds from now
+    const itemWithTimer = { ...item, returnTime }
+
+    setCategorizedItems((prev) => {
+      const newMap = new Map(prev)
+      const currentItems = newMap.get(item.type) || []
+      newMap.set(item.type, [...currentItems, itemWithTimer])
+      return newMap
+    })
+
+    // Set timer to return item to first column
+    const timerId = setTimeout(() => {
+      returnItemToUncategorized(item)
+    }, 5000)
+
+    // Store timer reference
+    timersRef.current.set(item.id, timerId)
+  }
+
+  // Handle returning item to uncategorized
+  const returnItemToUncategorized = (item: FoodItem) => {
+    // Clear the timer
+    if (timersRef.current.has(item.id)) {
+      clearTimeout(timersRef.current.get(item.id))
+      timersRef.current.delete(item.id)
+    }
+
+    // Remove from categorized items
+    setCategorizedItems((prev) => {
+      const newMap = new Map(prev)
+      const currentItems = newMap.get(item.type) || []
+      newMap.set(
+        item.type,
+        currentItems.filter((i) => i.id !== item.id),
+      )
+      return newMap
+    })
+
+    // Add back to uncategorized items
+    setUncategorizedItems((prev) => {
+      // Check if item is already in uncategorized to prevent duplicates
+      if (prev.some((i) => i.id === item.id)) return prev
+      return [...prev, item]
+    })
+  }
+
+  // Reset all categories
+  const resetCategories = () => {
+    // Clear all timers
+    timersRef.current.forEach((timer) => clearTimeout(timer))
+    timersRef.current.clear()
+
+    setUncategorizedItems(initialFoodItems)
+    setCategorizedItems(new Map(foodTypes.map((type) => [type, []])))
+  }
+
+  // Calculate remaining time for an item
+  const getRemainingSeconds = (returnTime?: number) => {
+    if (!returnTime) return 0
+    const remaining = Math.max(0, Math.ceil((returnTime - Date.now()) / 1000))
+    return remaining
+  }
+
+  // Force component to update every second to show countdown
+  const [, setForceUpdate] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setForceUpdate((prev) => prev + 1)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="container mx-auto py-8">
+      <h1 className="mb-8 text-3xl font-bold text-center">Food Categorizer</h1>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Uncategorized Items Column */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-center">Food Items</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
+            {uncategorizedItems.length > 0 ? (
+              uncategorizedItems.map((item) => (
+                <Button
+                  key={item.id}
+                  variant="outline"
+                  className="w-full justify-between"
+                  onClick={() => handleCategorize(item)}
+                >
+                  <span>{item.name}</span>
+                  <ArrowRightIcon className="h-4 w-4 ml-2" />
+                </Button>
+              ))
+            ) : (
+              <p className="text-center text-muted-foreground py-4">All items categorized</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Fruit Column */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-center">Fruits</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
+            {(categorizedItems.get("Fruit") || []).length > 0 ? (
+              (categorizedItems.get("Fruit") || []).map((item) => (
+                <Button
+                  key={item.id}
+                  variant="secondary"
+                  className="w-full justify-between hover:bg-secondary/80"
+                  onClick={() => returnItemToUncategorized(item)}
+                >
+                  <span>{item.name}</span>
+                  <div className="flex items-center">
+                    <ClockIcon className="h-3 w-3 mr-1" />
+                    <span>{getRemainingSeconds(item.returnTime)}s</span>
+                    <ArrowLeftIcon className="h-4 w-4 ml-2" />
+                  </div>
+                </Button>
+              ))
+            ) : (
+              <p className="text-center text-muted-foreground py-4">No fruits yet</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Vegetable Column */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-center">Vegetables</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
+            {(categorizedItems.get("Vegetable") || []).length > 0 ? (
+              (categorizedItems.get("Vegetable") || []).map((item) => (
+                <Button
+                  key={item.id}
+                  variant="secondary"
+                  className="w-full justify-between hover:bg-secondary/80"
+                  onClick={() => returnItemToUncategorized(item)}
+                >
+                  <span>{item.name}</span>
+                  <div className="flex items-center">
+                    <ClockIcon className="h-3 w-3 mr-1" />
+                    <span>{getRemainingSeconds(item.returnTime)}s</span>
+                    <ArrowLeftIcon className="h-4 w-4 ml-2" />
+                  </div>
+                </Button>
+              ))
+            ) : (
+              <p className="text-center text-muted-foreground py-4">No vegetables yet</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex justify-center mt-8">
+        <Button onClick={resetCategories}>Reset All</Button>
+      </div>
     </div>
-  );
+  )
 }
